@@ -40,6 +40,11 @@ from pathlib import Path
 from anthropic import Anthropic
 from dotenv import load_dotenv
 
+try:
+    from bash_utils import collect_output, run_bash_command, run_process, run_shell_subprocess
+except ImportError:
+    from agents.bash_utils import collect_output, run_bash_command, run_process, run_shell_subprocess
+
 load_dotenv(override=True)
 
 if os.getenv("ANTHROPIC_BASE_URL"):
@@ -53,13 +58,7 @@ MODEL = os.environ["MODEL_ID"]
 def detect_repo_root(cwd: Path) -> Path | None:
     """Return git repo root if cwd is inside a repo, else None."""
     try:
-        r = subprocess.run(
-            ["git", "rev-parse", "--show-toplevel"],
-            cwd=cwd,
-            capture_output=True,
-            text=True,
-            timeout=10,
-        )
+        r = run_process(["git", "rev-parse", "--show-toplevel"], cwd=cwd, timeout=10)
         if r.returncode != 0:
             return None
         root = Path(r.stdout.strip())
@@ -236,13 +235,7 @@ class WorktreeManager:
 
     def _is_git_repo(self) -> bool:
         try:
-            r = subprocess.run(
-                ["git", "rev-parse", "--is-inside-work-tree"],
-                cwd=self.repo_root,
-                capture_output=True,
-                text=True,
-                timeout=10,
-            )
+            r = run_process(["git", "rev-parse", "--is-inside-work-tree"], cwd=self.repo_root, timeout=10)
             return r.returncode == 0
         except Exception:
             return False
@@ -250,17 +243,11 @@ class WorktreeManager:
     def _run_git(self, args: list[str]) -> str:
         if not self.git_available:
             raise RuntimeError("Not in a git repository. worktree tools require git.")
-        r = subprocess.run(
-            ["git", *args],
-            cwd=self.repo_root,
-            capture_output=True,
-            text=True,
-            timeout=120,
-        )
+        r = run_process(["git", *args], cwd=self.repo_root, timeout=120)
         if r.returncode != 0:
-            msg = (r.stdout + r.stderr).strip()
+            msg = collect_output(r.stdout, r.stderr, default="")
             raise RuntimeError(msg or f"git {' '.join(args)} failed")
-        return (r.stdout + r.stderr).strip() or "(no output)"
+        return collect_output(r.stdout, r.stderr)
 
     def _load_index(self) -> dict:
         return json.loads(self.index_path.read_text())
@@ -355,14 +342,8 @@ class WorktreeManager:
         path = Path(wt["path"])
         if not path.exists():
             return f"Error: Worktree path missing: {path}"
-        r = subprocess.run(
-            ["git", "status", "--short", "--branch"],
-            cwd=path,
-            capture_output=True,
-            text=True,
-            timeout=60,
-        )
-        text = (r.stdout + r.stderr).strip()
+        r = run_process(["git", "status", "--short", "--branch"], cwd=path, timeout=60)
+        text = collect_output(r.stdout, r.stderr, default="")
         return text or "Clean worktree"
 
     def run(self, name: str, command: str) -> str:
@@ -378,15 +359,8 @@ class WorktreeManager:
             return f"Error: Worktree path missing: {path}"
 
         try:
-            r = subprocess.run(
-                command,
-                shell=True,
-                cwd=path,
-                capture_output=True,
-                text=True,
-                timeout=300,
-            )
-            out = (r.stdout + r.stderr).strip()
+            r = run_shell_subprocess(command, cwd=path, timeout=300)
+            out = collect_output(r.stdout, r.stderr, default="")
             return out[:50000] if out else "(no output)"
         except subprocess.TimeoutExpired:
             return "Error: Timeout (300s)"
@@ -483,22 +457,7 @@ def safe_path(p: str) -> Path:
 
 
 def run_bash(command: str) -> str:
-    dangerous = ["rm -rf /", "sudo", "shutdown", "reboot", "> /dev/"]
-    if any(d in command for d in dangerous):
-        return "Error: Dangerous command blocked"
-    try:
-        r = subprocess.run(
-            command,
-            shell=True,
-            cwd=WORKDIR,
-            capture_output=True,
-            text=True,
-            timeout=120,
-        )
-        out = (r.stdout + r.stderr).strip()
-        return out[:50000] if out else "(no output)"
-    except subprocess.TimeoutExpired:
-        return "Error: Timeout (120s)"
+    return run_bash_command(command, WORKDIR)
 
 
 def run_read(path: str, limit: int = None) -> str:

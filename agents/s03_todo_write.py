@@ -28,11 +28,15 @@ Key insight: "The agent can track its own progress -- and I can see it."
 """
 
 import os
-import subprocess
 from pathlib import Path
 
 from anthropic import Anthropic
 from dotenv import load_dotenv
+
+try:
+    from bash_utils import run_bash_command
+except ImportError:
+    from agents.bash_utils import run_bash_command
 
 load_dotenv(override=True)
 
@@ -97,16 +101,7 @@ def safe_path(p: str) -> Path:
     return path
 
 def run_bash(command: str) -> str:
-    dangerous = ["rm -rf /", "sudo", "shutdown", "reboot", "> /dev/"]
-    if any(d in command for d in dangerous):
-        return "Error: Dangerous command blocked"
-    try:
-        r = subprocess.run(command, shell=True, cwd=WORKDIR,
-                           capture_output=True, text=True, timeout=120)
-        out = (r.stdout + r.stderr).strip()
-        return out[:50000] if out else "(no output)"
-    except subprocess.TimeoutExpired:
-        return "Error: Timeout (120s)"
+    return run_bash_command(command, WORKDIR)
 
 def run_read(path: str, limit: int = None) -> str:
     try:

@@ -39,7 +39,6 @@ NOT a teaching session -- this is the "put it all together" reference.
 import json
 import os
 import re
-import subprocess
 import threading
 import time
 import uuid
@@ -47,6 +46,11 @@ from pathlib import Path
 from queue import Queue
 
 from anthropic import Anthropic
+
+try:
+    from bash_utils import collect_output, run_bash_command, run_shell_subprocess
+except ImportError:
+    from agents.bash_utils import collect_output, run_bash_command, run_shell_subprocess
 from dotenv import load_dotenv
 
 load_dotenv(override=True)
@@ -78,16 +82,7 @@ def safe_path(p: str) -> Path:
     return path
 
 def run_bash(command: str) -> str:
-    dangerous = ["rm -rf /", "sudo", "shutdown", "reboot", "> /dev/"]
-    if any(d in command for d in dangerous):
-        return "Error: Dangerous command blocked"
-    try:
-        r = subprocess.run(command, shell=True, cwd=WORKDIR,
-                           capture_output=True, text=True, timeout=120)
-        out = (r.stdout + r.stderr).strip()
-        return out[:50000] if out else "(no output)"
-    except subprocess.TimeoutExpired:
-        return "Error: Timeout (120s)"
+    return run_bash_command(command, WORKDIR)
 
 def run_read(path: str, limit: int = None) -> str:
     try:
@@ -339,9 +334,8 @@ class BackgroundManager:
 
     def _exec(self, tid: str, command: str, timeout: int):
         try:
-            r = subprocess.run(command, shell=True, cwd=WORKDIR,
-                               capture_output=True, text=True, timeout=timeout)
-            output = (r.stdout + r.stderr).strip()[:50000]
+            r = run_shell_subprocess(command, cwd=WORKDIR, timeout=timeout)
+            output = collect_output(r.stdout, r.stderr)
             self.tasks[tid].update({"status": "completed", "result": output or "(no output)"})
         except Exception as e:
             self.tasks[tid].update({"status": "error", "result": str(e)})
