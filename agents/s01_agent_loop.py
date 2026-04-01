@@ -25,6 +25,7 @@ policy, hooks, and lifecycle controls on top.
 """
 
 import os
+import shutil
 import subprocess
 
 from anthropic import Anthropic
@@ -56,12 +57,19 @@ def run_bash(command: str) -> str:
     if any(d in command for d in dangerous):
         return "Error: Dangerous command blocked"
     try:
-        r = subprocess.run(command, shell=True, cwd=os.getcwd(),
-                           capture_output=True, text=True, timeout=120)
-        out = (r.stdout + r.stderr).strip()
+        bash = shutil.which("bash")
+        if bash:
+            r = subprocess.run([bash, "-lc", command], cwd=os.getcwd(),
+                               capture_output=True, text=True, timeout=120)
+        else:
+            r = subprocess.run(command, shell=True, cwd=os.getcwd(),
+                               capture_output=True, text=True, timeout=120)
+        out = ((r.stdout or "") + (r.stderr or "")).strip()
         return out[:50000] if out else "(no output)"
     except subprocess.TimeoutExpired:
         return "Error: Timeout (120s)"
+    except Exception as e:
+        return f"Error: {e}"
 
 
 # -- The core pattern: a while loop that calls tools until the model stops --
