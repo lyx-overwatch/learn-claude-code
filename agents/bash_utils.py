@@ -23,12 +23,16 @@ def collect_output(stdout: str | None, stderr: str | None,
 
 
 def run_process(args: str | Sequence[str], cwd, timeout: int,
-                shell: bool = False) -> subprocess.CompletedProcess[str]:
+                shell: bool = False,
+                encoding: str | None = None) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         args,
         cwd=cwd,
         capture_output=True,
         text=True,
+        encoding=encoding,
+        errors="replace",
+        # stdin=subprocess.DEVNULL,
         timeout=timeout,
         shell=shell,
     )
@@ -37,7 +41,7 @@ def run_process(args: str | Sequence[str], cwd, timeout: int,
 def run_shell_subprocess(command: str, cwd, timeout: int) -> subprocess.CompletedProcess[str]:
     bash = shutil.which("bash")
     if bash:
-        return run_process([bash, "-lc", command], cwd=cwd, timeout=timeout)
+        return run_process([bash, "-lc", command], cwd=cwd, timeout=timeout, encoding="utf-8")
     return run_process(command, cwd=cwd, timeout=timeout, shell=True)
 
 

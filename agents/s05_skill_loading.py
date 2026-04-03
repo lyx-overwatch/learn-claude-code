@@ -203,6 +203,7 @@ def agent_loop(messages: list):
 
 
 if __name__ == "__main__":
+    print(f'SYSTEM: {SYSTEM}');
     history = []
     while True:
         try:

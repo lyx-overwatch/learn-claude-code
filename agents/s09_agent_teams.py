@@ -48,6 +48,7 @@ import os
 import subprocess
 import time
 from pathlib import Path
+import threading
 
 from anthropic import Anthropic
 from dotenv import load_dotenv
